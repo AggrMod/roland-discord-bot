@@ -23,7 +23,7 @@ async function runGame(game, lobbyMessage, guildId) {
     // Collect chat guesses
     const guesses = new Map();
     const collector = channel.createMessageCollector({
-      filter: m => game.players.has(m.author.id) && /^\d+$/.test(m.content.trim()),
+      filter: m => game.players.has(m.author.id) && ngService.isValidGuess(m.content, 1, 100),
       time: ngService.GUESS_SECS * 1000,
     });
     collector.on('collect', m => {
@@ -44,7 +44,8 @@ async function runGame(game, lobbyMessage, guildId) {
     engagementService.awardMinigamePlacements(
       guildId,
       sorted.slice(0, 3).map(([id]) => ({ userId: id })),
-      'numberguess'
+      'numberguess',
+      game.lobbyMessageId
     );
   }
   ngService.endGame(game.lobbyMessageId);

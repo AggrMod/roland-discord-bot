@@ -38,7 +38,7 @@ async function runGame(game, lobbyMessage, guildId) {
 
   const payoutWinners = winners.slice(0, 3).map(w => ({ userId: w.userId }));
   if (payoutWinners.length > 0) {
-    engagementService.awardMinigamePlacements(guildId, payoutWinners, 'slots');
+    engagementService.awardMinigamePlacements(guildId, payoutWinners, 'slots', game.lobbyMessageId);
   }
   slotsService.endGame(game.lobbyMessageId);
 }

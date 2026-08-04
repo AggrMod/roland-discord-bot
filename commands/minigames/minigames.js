@@ -39,6 +39,32 @@ const ALLOWED_ACTIONS = Object.freeze({
   blackjack: new Set(['start', 'cancel']),
 });
 
+const STANDALONE_JOIN_TIME = Object.freeze({ min: 10, max: 120 });
+const GAME_NIGHT_JOIN_TIME = Object.freeze({ min: 30, max: 180 });
+const BATTLE_PLAYER_LIMIT = Object.freeze({ min: 2, max: 100 });
+
+function validateRouteOptions(interaction, game, action) {
+  const joinTime = interaction.options.getInteger('join_time');
+  if (action === 'start' && joinTime !== null) {
+    const range = game === 'gamenight' ? GAME_NIGHT_JOIN_TIME : STANDALONE_JOIN_TIME;
+    if (joinTime < range.min || joinTime > range.max) {
+      return `Join time for \`${game}\` must be between ${range.min} and ${range.max} seconds.`;
+    }
+  }
+
+  const maxPlayers = interaction.options.getInteger('max_players');
+  if (game === 'battle' && action === 'create' && maxPlayers !== null
+      && (maxPlayers < BATTLE_PLAYER_LIMIT.min || maxPlayers > BATTLE_PLAYER_LIMIT.max)) {
+    return `Battle max players must be between ${BATTLE_PLAYER_LIMIT.min} and ${BATTLE_PLAYER_LIMIT.max}.`;
+  }
+
+  const games = interaction.options.getString('games');
+  if (games && games.length > 200) {
+    return 'The Game Night lineup is too long. Use the comma-separated game names shown in `/minigames help`.';
+  }
+  return null;
+}
+
 function buildOptionProxy(interaction, action) {
   return {
     getSubcommandGroup: () => null,
@@ -97,11 +123,15 @@ module.exports = {
           option
             .setName('join_time')
             .setDescription('Optional join time in seconds (for start actions)')
+            .setMinValue(10)
+            .setMaxValue(180)
             .setRequired(false))
         .addIntegerOption(option =>
           option
             .setName('max_players')
             .setDescription('Optional max players (battle create)')
+            .setMinValue(2)
+            .setMaxValue(100)
             .setRequired(false))
         .addStringOption(option =>
           option
@@ -112,6 +142,7 @@ module.exports = {
           option
             .setName('games')
             .setDescription('Optional game list (gamenight start)')
+            .setMaxLength(200)
             .setRequired(false))
         .addUserOption(option =>
           option
@@ -149,6 +180,11 @@ module.exports = {
           content: `\`${action}\` is not supported for \`${game}\`. Allowed: ${[...allowed].join(', ')}`,
           ephemeral: true
         });
+      }
+
+      const optionError = validateRouteOptions(interaction, game, action);
+      if (optionError) {
+        return interaction.reply({ content: optionError, ephemeral: true });
       }
 
       const target = interaction.client?.commands?.get(game);

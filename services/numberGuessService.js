@@ -44,6 +44,13 @@ class NumberGuessService {
 
   pickSecret(min = 1, max = 100) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
+  isValidGuess(value, min = 1, max = 100) {
+    const raw = String(value ?? '').trim();
+    if (!/^\d+$/.test(raw)) return false;
+    const guess = Number(raw);
+    return Number.isSafeInteger(guess) && guess >= min && guess <= max;
+  }
+
   /** Given guesses Map(userId→Number), award points. Returns sorted result. */
   resolveRound(game, guesses, secret) {
     const results = [...game.players].map(id => {

@@ -58,7 +58,8 @@ async function runGame(game, lobbyMessage, guildId) {
     engagementService.awardMinigamePlacements(
       guildId,
       sorted.slice(0, 3).map(([id]) => ({ userId: id })),
-      'wordscramble'
+      'wordscramble',
+      game.lobbyMessageId
     );
   }
   wsService.endGame(game.lobbyMessageId);

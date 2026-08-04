@@ -11,7 +11,7 @@ module.exports = {
       .setName('start')
       .setDescription('Start a Game Night lobby')
       .addIntegerOption(o => o.setName('join_time').setDescription('Seconds to gather players (30–180, default 90)').setMinValue(30).setMaxValue(180).setRequired(false))
-      .addStringOption(o => o.setName('games').setDescription('Comma-separated game list, e.g. diceduel,trivia,slots (default: all 9)').setRequired(false))
+      .addStringOption(o => o.setName('games').setDescription('Comma-separated game list, e.g. diceduel,trivia,slots (default: all 9)').setMaxLength(200).setRequired(false))
     )
     .addSubcommand(s => s.setName('skip').setDescription('Skip the current game (host only)'))
     .addSubcommand(s => s.setName('cancel').setDescription('Cancel the Game Night lobby or session (host only)'))
@@ -31,10 +31,12 @@ module.exports = {
       // ── /gamenight start ────────────────────────────────────────────────
       if (sub === 'start') {
         const gatherSecs = interaction.options.getInteger('join_time') || 90;
-        const gamesRaw   = interaction.options.getString('games');
-        const selectedGames = gamesRaw
-          ? gamesRaw.split(',').map(s => s.trim().toLowerCase()).filter(s => gnService.GAME_ROSTER.includes(s))
+        const gamesRaw = interaction.options.getString('games');
+        const requestedGames = gamesRaw
+          ? gamesRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
           : [];
+        const invalidGames = [...new Set(requestedGames.filter(s => !gnService.GAME_ROSTER.includes(s)))];
+        const selectedGames = [...new Set(requestedGames.filter(s => gnService.GAME_ROSTER.includes(s)))];
 
         await interaction.deferReply({ ephemeral: true });
 
@@ -43,8 +45,9 @@ module.exports = {
           return interaction.editReply({ content: '❌ A Game Night is already running in this channel.' });
         }
 
-        if (selectedGames.length === 0 && gamesRaw) {
-          return interaction.editReply({ content: `❌ None of those game names are valid.\nValid: \`${gnService.GAME_ROSTER.join(', ')}\`` });
+        if (invalidGames.length > 0 || (selectedGames.length === 0 && gamesRaw)) {
+          const invalid = invalidGames.length > 0 ? `Invalid: \`${invalidGames.join(', ')}\`.\n` : '';
+          return interaction.editReply({ content: `❌ ${invalid}Valid games: \`${gnService.GAME_ROSTER.join(', ')}\`` });
         }
 
         const placeholder = await channel.send({ content: '🎉 Setting up Game Night...' });

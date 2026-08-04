@@ -51,7 +51,8 @@ async function runGame(game, lobbyMessage, guildId) {
     engagementService.awardMinigamePlacements(
       guildId,
       winners.map(id => ({ userId: id })),
-      'trivia'
+      'trivia',
+      game.lobbyMessageId
     );
   }
   triviaService.endGame(game.lobbyMessageId);

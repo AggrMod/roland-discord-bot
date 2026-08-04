@@ -84,7 +84,7 @@ async function runGame(game, lobbyMessage, guildId) {
 
   const rewardUsers = survivors.slice(0, 3).map(id => ({ userId: id }));
   if (rewardUsers.length > 0) {
-    engagementService.awardMinigamePlacements(guildId, rewardUsers, 'diceduel');
+    engagementService.awardMinigamePlacements(guildId, rewardUsers, 'diceduel', game.lobbyMessageId);
   }
   ddService.endGame(game.lobbyMessageId);
 }

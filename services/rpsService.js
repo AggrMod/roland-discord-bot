@@ -72,12 +72,27 @@ class RpsService {
 
   /** Resolve a single matchup. Returns { winner, loser, draw } */
   resolveMatchup(choiceA, choiceB, idA, idB) {
-    if (!choiceA && !choiceB) return { winner: null, loser: null, draw: true, both: [idA, idB] };
+    if (!choiceA && !choiceB) return { winner: null, loser: null, draw: false, bothAbsent: true, eliminated: [idA, idB] };
     if (!choiceA) return { winner: idB, loser: idA, draw: false };
     if (!choiceB) return { winner: idA, loser: idB, draw: false };
     if (beats(choiceA, choiceB)) return { winner: idA, loser: idB, draw: false };
     if (beats(choiceB, choiceA)) return { winner: idB, loser: idA, draw: false };
     return { winner: null, loser: null, draw: true, both: [idA, idB] };
+  }
+
+  resolveTiebreaker(idA, idB, randomValue = Math.random()) {
+    const firstWins = Number(randomValue) < 0.5;
+    return {
+      winner: firstWins ? idA : idB,
+      loser: firstWins ? idB : idA,
+      draw: false,
+      tiebreaker: true,
+    };
+  }
+
+  shouldForceTiebreaker(attempt, maxAttempts = 3) {
+    return Number.isInteger(attempt) && Number.isInteger(maxAttempts)
+      && maxAttempts > 0 && attempt >= maxAttempts;
   }
 
   _applyAuthor(embed, guildId) {
@@ -105,7 +120,9 @@ class RpsService {
 
   buildMatchupResultEmbed({ round, playerA, choiceA, playerB, choiceB, result, guildId }) {
     let outcome;
-    if (result.draw) outcome = `🤝 **Draw!** Both survive and will be re-matched.`;
+    if (result.bothAbsent) outcome = 'Both players missed the timer and are eliminated.';
+    else if (result.tiebreaker) outcome = `Sudden-death draw limit reached. <@${result.winner}> advances by fair tiebreaker; <@${result.loser}> is eliminated.`;
+    else if (result.draw) outcome = `🤝 **Draw!** Both survive and will be re-matched.`;
     else outcome = `🏆 <@${result.winner}> wins!\n☠️ <@${result.loser}> is eliminated.`;
     const e = new EmbedBuilder().setTitle(`🪨 Round ${round} Result`)
       .setDescription(`<@${playerA}> played **${choiceLabel(choiceA)}**\n<@${playerB}> played **${choiceLabel(choiceB)}**\n\n${outcome}`)

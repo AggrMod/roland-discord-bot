@@ -1727,7 +1727,7 @@ function claimDailyReward(guildId, userId, username) {
   return { success: true, streak, bestStreak, points: rewardPoints };
 }
 
-function awardMinigamePlacements(guildId, placements = [], gameKey = 'minigame') {
+function awardMinigamePlacements(guildId, placements = [], gameKey = 'minigame', sessionId = null) {
   const normalizedGuildId = normalizeGuildId(guildId);
   if (!normalizedGuildId || !Array.isArray(placements) || placements.length === 0) return [];
   const cfg = getConfig(normalizedGuildId);
@@ -1737,6 +1737,7 @@ function awardMinigamePlacements(guildId, placements = [], gameKey = 'minigame')
     Math.max(0, Number(cfg.minigame_reward_third ?? DEFAULTS.minigame_reward_third)),
   ];
   const results = [];
+  const normalizedSessionId = String(sessionId || '').trim();
 
   for (let i = 0; i < placements.length; i++) {
     const entry = placements[i] || {};
@@ -1751,7 +1752,9 @@ function awardMinigamePlacements(guildId, placements = [], gameKey = 'minigame')
       username,
       actionType,
       points,
-      `game:${gameKey}:${userId}:${Date.now()}:${i + 1}`,
+      normalizedSessionId
+        ? `game:${gameKey}:${normalizedSessionId}:${userId}`
+        : `game:${gameKey}:${userId}:${Date.now()}:${i + 1}`,
       `${gameKey} placement #${i + 1}`
     );
     if (result.awarded) {

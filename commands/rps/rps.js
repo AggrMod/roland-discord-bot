@@ -5,34 +5,45 @@ const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const MAX_DRAW_ATTEMPTS = 3;
 
 async function runMatchup(channel, game, playerA, playerB, guildId) {
-  game.round++;
-  const matchMsg = await channel.send({ embeds: [rpsService.buildMatchupEmbed({ round: game.round, playerA, playerB, guildId })] });
-  for (const e of rpsService.CHOICES) await matchMsg.react(e).catch(() => {});
+  for (let attempt = 1; attempt <= MAX_DRAW_ATTEMPTS; attempt++) {
+    game.round++;
+    const matchMsg = await channel.send({ embeds: [rpsService.buildMatchupEmbed({ round: game.round, playerA, playerB, guildId })] });
+    for (const e of rpsService.CHOICES) await matchMsg.react(e).catch(() => {});
 
-  // Collect one reaction per player
-  const picks = new Map();
-  const collector = matchMsg.createReactionCollector({
-    filter: (r, u) => rpsService.CHOICES.includes(r.emoji.name) && !u.bot && [playerA, playerB].includes(u.id),
-    time: rpsService.MATCH_SECS * 1000,
-  });
-  collector.on('collect', (r, u) => {
-    if (!picks.has(u.id)) picks.set(u.id, r.emoji.name);
-  });
-  await new Promise(resolve => collector.on('end', resolve));
+    const picks = new Map();
+    const collector = matchMsg.createReactionCollector({
+      filter: (r, u) => rpsService.CHOICES.includes(r.emoji.name) && !u.bot && [playerA, playerB].includes(u.id),
+      time: rpsService.MATCH_SECS * 1000,
+    });
+    collector.on('collect', (r, u) => {
+      if (!picks.has(u.id)) picks.set(u.id, r.emoji.name);
+    });
+    await new Promise(resolve => collector.on('end', resolve));
 
-  const choiceA = picks.get(playerA) || null;
-  const choiceB = picks.get(playerB) || null;
-  const result = rpsService.resolveMatchup(choiceA, choiceB, playerA, playerB);
+    const choiceA = picks.get(playerA) || null;
+    const choiceB = picks.get(playerB) || null;
+    let result = rpsService.resolveMatchup(choiceA, choiceB, playerA, playerB);
+    if (result.draw && rpsService.shouldForceTiebreaker(attempt, MAX_DRAW_ATTEMPTS)) {
+      result = rpsService.resolveTiebreaker(playerA, playerB);
+    }
 
-  await channel.send({ embeds: [rpsService.buildMatchupResultEmbed({ round: game.round, playerA, choiceA, playerB, choiceB, result, guildId })] });
+    await channel.send({ embeds: [rpsService.buildMatchupResultEmbed({ round: game.round, playerA, choiceA, playerB, choiceB, result, guildId })] });
 
-  if (!result.draw && result.loser) {
-    game.eliminated.add(result.loser);
+    if (result.bothAbsent) {
+      game.eliminated.add(playerA);
+      game.eliminated.add(playerB);
+      return result;
+    }
+    if (!result.draw && result.loser) {
+      game.eliminated.add(result.loser);
+      return result;
+    }
+    if (attempt < MAX_DRAW_ATTEMPTS) await sleep(1500);
   }
-
-  return result;
+  return null;
 }
 
 async function runGame(game, lobbyMessage, guildId) {
@@ -67,7 +78,7 @@ async function runGame(game, lobbyMessage, guildId) {
   }
   const rewardUsers = survivors.slice(0, 3).map(id => ({ userId: id }));
   if (rewardUsers.length > 0) {
-    engagementService.awardMinigamePlacements(guildId, rewardUsers, 'rps');
+    engagementService.awardMinigamePlacements(guildId, rewardUsers, 'rps', game.lobbyMessageId);
   }
   rpsService.endGame(game.lobbyMessageId);
 }

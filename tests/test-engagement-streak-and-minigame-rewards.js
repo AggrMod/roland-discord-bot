@@ -54,9 +54,18 @@ function run() {
   const rewarded = engagementService.awardMinigamePlacements(
     guildId,
     [{ userId: userA, username: 'alpha' }, { userId: userB, username: 'beta' }, { userId: userC, username: 'gamma' }],
-    'trivia'
+    'trivia',
+    `session-${suffix}`
   );
   assert.strictEqual(rewarded.length, 3, 'minigame payouts should include top three users');
+
+  const duplicateRewards = engagementService.awardMinigamePlacements(
+    guildId,
+    [{ userId: userA, username: 'alpha' }, { userId: userB, username: 'beta' }, { userId: userC, username: 'gamma' }],
+    'trivia',
+    `session-${suffix}`
+  );
+  assert.strictEqual(duplicateRewards.length, 0, 'the same game session must never pay rewards twice');
 
   const a = engagementService.getUserPoints(guildId, userA);
   const b = engagementService.getUserPoints(guildId, userB);

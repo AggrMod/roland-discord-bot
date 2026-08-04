@@ -8,6 +8,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const engagementService = require('./engagementService');
+const numberGuessService = require('./numberGuessService');
 const logger = require('../utils/logger');
 
 const JOIN_EMOJI = '🎉';
@@ -74,7 +75,7 @@ class GameNightService {
       stopCollectors(previous, 'session_replaced');
     }
     const games = (selectedGames && selectedGames.length > 0)
-      ? selectedGames.filter(g => GAME_ROSTER.includes(g))
+      ? [...new Set(selectedGames.filter(g => GAME_ROSTER.includes(g)))]
       : [...GAME_ROSTER];
     const session = {
       channelId, lobbyMessageId: messageId, creatorId, gatherSecs,
@@ -272,7 +273,7 @@ class GameNightService {
     const topWinners = sorted.filter(([, s]) => s === sorted[0][1]).map(([id]) => `<@${id}>`);
     const rewardUsers = sorted.slice(0, 3).map(([id]) => ({ userId: id, username: session.playerNames.get(id) || id }));
     if (rewardUsers.length > 0) {
-      engagementService.awardMinigamePlacements(guildId, rewardUsers, 'gamenight');
+      engagementService.awardMinigamePlacements(guildId, rewardUsers, 'gamenight', session.lobbyMessageId);
     }
     await channel.send({ content: topWinners.join(' '), embeds: [this.buildChampionEmbed(session, guildId, total)] });
     this.endSession(channel.id);
@@ -485,7 +486,7 @@ RUNNERS.numberguess = async (channel, guildId, players, playerNames, session) =>
     await channel.send({ embeds: [qE] });
 
     const guesses = new Map();
-    const col = trackCollector(session, channel.createMessageCollector({ filter: m => players.has(m.author.id) && /^\d+$/.test(m.content.trim()), time: 30000 }));
+    const col = trackCollector(session, channel.createMessageCollector({ filter: m => players.has(m.author.id) && numberGuessService.isValidGuess(m.content, 1, 100), time: 30000 }));
     col.on('collect', m => { if (!guesses.has(m.author.id)) guesses.set(m.author.id, parseInt(m.content.trim())); });
     await new Promise(res => col.on('end', res));
     if (session.skipRequested || sessionStopped(session)) return [];
@@ -634,9 +635,27 @@ RUNNERS.rps = async (channel, guildId, players, playerNames, session) => {
   const alive = new Set(players);
   const eliminated = [];
   let round = 0;
+  const maxRounds = Math.max(6, Math.ceil(Math.log2(Math.max(players.length, 2))) * 4);
 
   while (alive.size > 1) {
     if (session.skipRequested) break;
+    if (round >= maxRounds) {
+      const finalists = [...alive];
+      const winnerIndex = Math.floor(Math.random() * finalists.length);
+      const suddenDeathWinner = finalists[winnerIndex];
+      for (const id of finalists) {
+        if (id === suddenDeathWinner) continue;
+        alive.delete(id);
+        eliminated.unshift(id);
+      }
+      const suddenDeathEmbed = new EB()
+        .setTitle('RPS — Sudden-death tiebreaker')
+        .setDescription(`The draw limit was reached. **${playerNames.get(suddenDeathWinner) || suddenDeathWinner}** advances from the fair tiebreaker.`)
+        .setTimestamp();
+      applyEmbedBranding(suddenDeathEmbed, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'Game Night · RPS' });
+      await channel.send({ embeds: [suddenDeathEmbed] });
+      break;
+    }
     round++;
     const list = [...alive].sort(() => Math.random() - 0.5);
     const matchups = [];
@@ -668,7 +687,11 @@ RUNNERS.rps = async (channel, guildId, players, playerNames, session) => {
 
       const label = c => c || '❓';
       const rLine = `**${playerNames.get(pA)||pA}**: ${label(cA)} vs **${playerNames.get(pB)||pB}**: ${label(cB)}`;
-      const outcome = loser ? `💀 **${playerNames.get(loser)||loser}** is eliminated!` : '🤝 Draw — both advance!';
+      const outcome = (!cA && !cB)
+        ? 'Both players missed the timer and are eliminated.'
+        : loser
+          ? `💀 **${playerNames.get(loser)||loser}** is eliminated!`
+          : '🤝 Draw — both advance!';
       const resE = new EB().setTitle(`🪨 Matchup Result`).setDescription(`${rLine}\n\n${outcome}`).setTimestamp();
       applyEmbedBranding(resE,{guildId,moduleKey: 'minigames',defaultColor:loser?'#ef4444':'#6366f1',defaultFooter:`Game Night � RPS`});
       await channel.send({embeds:[resE]});

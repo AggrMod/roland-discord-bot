@@ -83,6 +83,7 @@ module.exports = {
             .setName('max_players')
             .setDescription('Maximum players (optional, leave empty for unlimited)')
             .setMinValue(2)
+            .setMaxValue(100)
             .setRequired(false))
         .addRoleOption(option =>
           option
